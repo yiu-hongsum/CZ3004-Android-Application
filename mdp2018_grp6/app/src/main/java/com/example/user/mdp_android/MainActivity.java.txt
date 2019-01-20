@@ -1,0 +1,1690 @@
+package com.example.user.mdp_android;
+
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.SystemClock;
+import android.support.v4.content.LocalBroadcastManager;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
+import android.text.InputFilter;
+import android.text.method.ScrollingMovementMethod;
+import android.util.Log;
+import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.CompoundButton;
+import android.widget.EditText;
+import android.widget.GridLayout;
+import android.widget.ListView;
+import android.widget.RelativeLayout;
+import android.widget.Switch;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.math.BigInteger;
+import java.util.ArrayList;
+
+public class MainActivity extends AppCompatActivity {
+    public static final String MY_PREFERENCE = "MyPref";
+    public static final int REQUEST_CONNECT_DEVICE_SECURE = 6;
+    private static final String TAG = "MainActivity";
+    private static final String w = "Up";
+    private static final String a = "Left";
+    private static final String s = "Down";
+    private static final String d = "Right";
+    Button timer, update, automanual, up, down, left, right, setstart, sendMsg, clearMsg;
+    TextView exploretime, fastesttime, status, displayexplore, displayfastest, xcoor, ycoor, mdfstring1, mdfstring2, obstring;
+    EditText editmsg;
+    Switch fastswitch, startwaypointswitch, robustbluetooth;
+    Drawable waypointBox, goalBox;
+    StringBuilder messages;
+    ArrayList<MessageText> msg_chatlist = new ArrayList<>();
+    ArrayAdapter msg_listadapter;
+    ListView msg_lv_chat, msg_lv_preview;
+    BluetoothDevice bt_device;
+    int waypointloca = -1;
+    boolean connectionstatus = false;
+    ArrayList<Integer> topLeftList;
+    Menu menu_item;
+    Drawable mbox, mrobot, mexploredrobot, mwaypointcleared, startbox, mobstaclebox, mfastestbox;
+    RelativeLayout rl_msg;
+    boolean manualon = false;
+    long startTime = 0L;
+    long timeInMilliseconds = 0L;
+    long timeSwapBuff = 0L;
+    long updatedTime = 0L;
+    boolean stopTimer = false;
+    int topLeft;
+    int robotcenter;
+    String currentDir;
+    int currentstart = -1;
+    EditText f1, f2;
+    String MDFString1, MDFString2, OBString;
+    ArrayList<Integer> exploredmap = new ArrayList<>();
+    ArrayList<Integer> obstaclemap = new ArrayList<>();
+    ArrayList<Integer> obstaclelist = new ArrayList<Integer>();
+    ArrayList<String> arrowobstaclelist = new ArrayList<String>();
+    ArrayList<Integer> tarrowobstaclelist = new ArrayList<>();
+
+    ArrayList<Integer> ctarrowobstaclelist = new ArrayList<>();
+    String updateString = "";
+    boolean isUpdate = true;
+    LayoutInflater inflater;
+    SharedPreferences sharedPreferences;
+    BluetoothAdapter myBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+    Runnable runnable = new Runnable() {
+        public void run() {
+            finish();
+        }
+    };
+    private String currentrun = "Stop";
+    private Context mContext;
+    protected final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (action.equals(myBluetoothAdapter.ACTION_STATE_CHANGED)) {
+                final int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, myBluetoothAdapter.ERROR);
+                switch (state) {
+                    case BluetoothAdapter.STATE_ON:
+                        Toast.makeText(getApplicationContext(), "Bluetooth is on", Toast.LENGTH_LONG).show();
+                        break;
+                    case BluetoothAdapter.STATE_TURNING_ON:
+                        Toast.makeText(getApplicationContext(), "Bluetooth is turning on", Toast.LENGTH_LONG).show();
+                        break;
+                    case BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE:
+                        Toast.makeText(getApplicationContext(), "Bluetooth is visible to other devices  ", Toast.LENGTH_LONG).show();
+                        break;
+                }
+            }
+            if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
+                bt_device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                String temp = bt_device.getName();
+                Toast.makeText(getApplicationContext(), "Connected to " + temp, Toast.LENGTH_SHORT).show();
+
+                menu_item.findItem(R.id.bluetooth).setVisible(false);
+                menu_item.findItem(R.id.bluetoothdisabled).setVisible(true);
+                rl_msg.setVisibility(View.VISIBLE);
+                connectionstatus = true;
+                status.setText("Robot Connected");
+                status.setBackgroundColor(getResources().getColor(R.color._light_green));
+
+            } else if (BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action)) {
+
+                menu_item.findItem(R.id.bluetooth).setVisible(true);
+                menu_item.findItem(R.id.bluetoothdisabled).setVisible(false);
+                rl_msg.setVisibility(View.GONE);
+                status.setText("Robot Stopped");
+                status.setBackgroundColor(getResources().getColor(R.color.red));
+                if (robustbluetooth.isChecked()) {
+                    Toast.makeText(getApplicationContext(), "Device disconnected.. Trying to Reconnect", Toast.LENGTH_SHORT).show();
+
+                    Intent reconnect_intent = new Intent("reconnectint");
+                    LocalBroadcastManager.getInstance(mContext).sendBroadcast(reconnect_intent);
+                    connectionstatus = false;
+                } else {
+                    connectionstatus = false;
+                    Toast.makeText(getApplicationContext(), "Device disconnected", Toast.LENGTH_SHORT).show();
+                }
+
+            }
+        }
+    };
+    private Handler customHandler = new Handler();
+    protected Runnable updateTimerThread = new Runnable() {
+        public void run() {
+            timeInMilliseconds = SystemClock.uptimeMillis() - startTime;
+            updatedTime = timeSwapBuff + timeInMilliseconds;
+
+            int secs = (int) (updatedTime / 1000);
+            int mins = secs / 60;
+            secs = secs % 60;
+            int milliseconds = (int) (updatedTime % 1000);
+            String localtime = "" + mins + ":" + String.format("%02d", secs)
+                    + ":" + String.format("%03d", milliseconds);
+            if (currentrun == "Exploration") {
+                exploretime.setText(localtime);
+            } else if (currentrun == "Fastest") {
+                fastesttime.setText(localtime);
+            }
+            if (!stopTimer)
+                customHandler.postDelayed(this, 0);
+        }
+    };
+    private final BroadcastReceiver mBroadcastReceiver2 = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String text = intent.getStringExtra("theMessage");
+            boolean isReceived = true;
+            msg_chatlist.add(new MessageText(true, text, getResources()));
+
+            String t1 = text;
+            String tempMsg = text.toLowerCase();
+            if (tempMsg.length() > 1) {
+                String temp1 = tempMsg.substring(0, 2);
+                if (temp1.equals("tm")) {
+                } else {
+                    msg_listadapter.add("Received: " + text);
+                    msg_listview(getApplicationContext());
+                }
+            }
+            switch (tempMsg) {
+                case "a":
+                    tempMsg = "Left";
+                    rotateRobot(tempMsg, isReceived);
+                    break;
+                case "s":
+                    tempMsg = "Down";
+                    rotateRobot(tempMsg, isReceived);
+                    break;
+                case "d":
+                    tempMsg = "Right";
+                    rotateRobot(tempMsg, isReceived);
+                    break;
+                case "w":
+                    robotMovement(isReceived);
+                    break;
+                case "reset":
+                    resetMap(isReceived);
+                    break;
+                case "explore start":
+                    fastswitch.setChecked(false);
+                    setfastswitch(isReceived);
+                    timerMethod(isReceived);
+                    break;
+                case "fastest start":
+                    fastswitch.setChecked(true);
+                    setfastswitch(isReceived);
+                    timerMethod(isReceived);
+                    break;
+                case "robust on":
+                    robustbluetooth.setChecked(true);
+                    break;
+                case "robust off":
+                    robustbluetooth.setChecked(false);
+                    break;
+                case "send grid":
+                    sendGrid(isReceived);
+                    break;
+                case "stop":
+                    status.setText("Robot Stopped");
+                    status.setBackgroundColor(getResources().getColor(R.color.red));
+                    break;
+                case "timer stop":
+                    timerMethod(true);
+                    break;
+            }
+            if (tempMsg.length() > 1) {
+                String temp1 = tempMsg.substring(0, 2);
+                switch (temp1) {
+                    case "wp":
+                        if (tempMsg.matches("[a-zA-Z]{2}[(]{1}[0-9]{2}[,][0-9]{2}[)]{1}")) {
+                            try {
+
+                                int x1 = Integer.valueOf(tempMsg.substring(3, 5));
+                                int y1 = Integer.valueOf(tempMsg.substring(6, 8));
+                                int boxid = ((19 - y1) * 15) + x1;
+                                startwaypointswitch.setChecked(true);
+                                setStartWaypoint(isReceived, boxid);
+                            } catch (NumberFormatException e) {
+                                e.printStackTrace();
+                                Toast.makeText(getApplicationContext(), "Invalid Waypoint", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                        break;
+                    case "sp":
+                        if (tempMsg.matches("[a-zA-Z]{2}[(]{1}[0-9]{2}[,][0-9]{2}[)]{1}")) {
+                            try {
+                                int x1 = Integer.valueOf(tempMsg.substring(3, 5));
+                                int y1 = Integer.valueOf(tempMsg.substring(6, 8));
+                                int boxid = ((19 - y1) * 15) + x1;
+                                startwaypointswitch.setChecked(false);
+                                setStartWaypoint(isReceived, boxid);
+                                setStart(isReceived);
+                            } catch (NumberFormatException e) {
+                                e.printStackTrace();
+                                Toast.makeText(getApplicationContext(), "Invalid Start Point", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+
+                        break;
+                    case "ob":
+                        if (tempMsg.matches("[a-zA-Z]{2}[(]{1}[0-9]{2}[,][0-9]{2}[,]{1}[UDLRudlr3]{1}[)]{1}")) {
+                            //ob(xx,yy,N/S/E/W,u)
+                            try {
+                                int x1 = Integer.valueOf(tempMsg.substring(3, 5));
+                                int y1 = Integer.valueOf(tempMsg.substring(6, 8));
+                                String loc = tempMsg.substring(9, 10).toUpperCase();
+                                //String arrow = tempMsg.substring(11, 12).toUpperCase();
+                                int boxid = ((19 - y1) * 15) + x1;
+                                setObstacle(boxid, loc);
+                            } catch (NumberFormatException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                        break;
+                    case "md":
+                        tempMsg = t1;
+                        String[] mdfstr = tempMsg.split(":");
+                        MDFString1 = mdfstr[1].toString();
+                        MDFString2 = mdfstr[2].toString();
+                        checkArrow(tempMsg, isUpdate);
+                        //finalMapDecoder(tempMsg, isUpdate);
+                        break;
+                    case "tm":
+                        tempMsg = t1;
+                        mapDecoder(tempMsg, isUpdate);
+                        break;
+                    case "fa":
+                        String[] fastestpath = tempMsg.split(":");
+                        for (int i = 1; i < fastestpath.length; i++) {
+                            switch (fastestpath[i]) {
+                                case "w":
+                                    robotMovement(true);
+                                    break;
+                                case "a":
+                                    rotateRobot("Left", true);
+                                    break;
+                                case "d":
+                                    rotateRobot("Right", true);
+                                    break;
+                                case "s":
+                                    rotateRobot("Down", true);
+                                    break;
+                            }
+                        }
+                        break;
+                }
+            }
+        }
+    };
+
+    public MainActivity() {
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        declarationMethod();
+        generateMap();
+        reg_bt_intentfilter();
+        setOnClickMethod();
+        LocalBroadcastManager.getInstance(this).registerReceiver(mBroadcastReceiver2, new IntentFilter("messaging"));
+    }
+
+    private void setOnClickMethod() {
+        fastswitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                setfastswitch(false);
+            }
+        });
+        startwaypointswitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                if (startwaypointswitch.isChecked()) {
+                    startwaypointswitch.setText("Set Waypoint");
+                    setstart.setText("Set Waypoint");
+                } else {
+                    startwaypointswitch.setText("Set Start");
+                    setstart.setText("Set Start");
+                }
+            }
+        });
+        sendMsg.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                String outgoingmsg = editmsg.getText().toString();
+                boolean isReceived = false;
+                sendmsgMethod(mContext, outgoingmsg, isReceived);
+            }
+        });
+        clearMsg.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                msg_listadapter.clear();
+                editmsg.setText("");
+            }
+        });
+        setstart.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                setStart(false);
+            }
+        });
+        automanual.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                autoManualMethod();
+            }
+        });
+        update.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                manualUpdate();
+            }
+        });
+        timer.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                timerMethod(false);
+            }
+        });
+        up.setOnTouchListener(new RepeatListener(400, 100, new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                robotMovement(false);
+            }
+        }));
+        down.setOnTouchListener(new RepeatListener(400, 100, new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                rotateRobot(s, false);
+            }
+        }));
+        left.setOnTouchListener(new RepeatListener(400, 100, new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                rotateRobot(a, false);
+            }
+        }));
+        right.setOnTouchListener(new RepeatListener(400, 100, new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+
+                rotateRobot(d, false);
+            }
+        }));
+    }
+
+    private void declarationMethod() {
+        exploretime = findViewById(R.id.viewExplore);
+        fastesttime = findViewById(R.id.viewFastest);
+        mbox = this.getResources().getDrawable(R.drawable.box);
+        mrobot = this.getResources().getDrawable(R.drawable.robotbox);
+        mexploredrobot = this.getResources().getDrawable(R.drawable.exploredbox);
+        mwaypointcleared = this.getResources().getDrawable(R.drawable.waypoint_box_cleared);
+        mfastestbox = this.getResources().getDrawable(R.drawable.fastestbox);
+        mobstaclebox = this.getResources().getDrawable(R.drawable.obstaclebox);
+        startbox = this.getResources().getDrawable(R.drawable.start_box);
+        rl_msg = (RelativeLayout) findViewById(R.id.msgLayOut);
+        robustbluetooth = findViewById(R.id.switch_robust);
+        goalBox = this.getResources().getDrawable(R.drawable.goalbox);
+        inflater = LayoutInflater.from(this);
+        topLeftList = new ArrayList<Integer>();
+        fastswitch = findViewById(R.id.switch_fastest);
+        timer = findViewById(R.id.buttonTimer);
+        displayexplore = findViewById(R.id.tv_exploration);
+        displayfastest = findViewById(R.id.tv_fastest);
+        startwaypointswitch = findViewById(R.id.switch_start_waypoint);
+        setstart = findViewById(R.id.bn_setstart);
+        xcoor = findViewById(R.id.et_xcoor);
+        ycoor = findViewById(R.id.et_ycoor);
+        xcoor.setFilters(new InputFilter[]{new InputFilterMinMax("0", "14")});
+        ycoor.setFilters(new InputFilter[]{new InputFilterMinMax("0", "19")});
+        waypointBox = this.getResources().getDrawable(R.drawable.waypoint_box);
+        automanual = findViewById(R.id.bn_automanual);
+        update = findViewById(R.id.bn_update);
+        msg_lv_preview = findViewById(R.id.msg_lv_preview);
+        msg_listadapter = new ArrayAdapter<String>(this, R.layout.msg_view);
+        messages = new StringBuilder();
+        editmsg = findViewById(R.id.et_msg);
+        sendMsg = findViewById(R.id.bn_send);
+        sharedPreferences = getSharedPreferences(MY_PREFERENCE, Context.MODE_PRIVATE);
+        up = findViewById(R.id.forwardButton);
+        down = findViewById(R.id.backButton);
+        left = findViewById(R.id.leftButton);
+        right = findViewById(R.id.rightButton);
+        clearMsg = findViewById(R.id.bn_clear);
+    }
+
+    private void autoManualMethod() {
+        if (manualon) {
+            automanual.setText("AUTO");
+            update.setEnabled(false);
+            isUpdate = true;
+            manualon = false;
+        } else {
+            automanual.setText("MANUAL");
+            update.setEnabled(true);
+            isUpdate = false;
+            manualon = true;
+        }
+    }
+
+    private void manualUpdate() {
+        mapDecoder(updateString, true);
+        isUpdate = false;
+        String string = String.valueOf("Map Updated");
+        status.setText(string);
+        status.setBackgroundColor(getResources().getColor(R.color._light_green));
+
+        sendmsgMethod(this, string, false);
+    }
+
+    protected void reg_bt_intentfilter() {
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
+        filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+        filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+        filter.addAction(BluetoothDevice.ACTION_FOUND);
+        registerReceiver(mBroadcastReceiver, filter);
+    }
+
+    private void timerMethod(boolean isReceived) {
+        if (!fastswitch.isChecked() && currentrun == "Stop") {
+            currentrun = "Exploration";
+            stopTimer = false;
+            startTime = SystemClock.uptimeMillis();
+            customHandler.postDelayed(updateTimerThread, 0);
+            timer.setText("Stop");
+            sendmsgMethod(this, "Exploration Start", isReceived);
+        } else if (currentrun == "Exploration") {
+            stopTimer = true;
+            customHandler.removeCallbacks(null);
+            timer.setText("Start");
+            currentrun = "Stop";
+            sendmsgMethod(this, "Exploration Stop", isReceived);
+        } else if (fastswitch.isChecked() && currentrun == "Stop") {
+            currentrun = "Fastest";
+            stopTimer = false;
+            startTime = SystemClock.uptimeMillis();
+            customHandler.postDelayed(updateTimerThread, 0);
+            timer.setText("Stop");
+            sendmsgMethod(this, "Fastest Path Start", isReceived);
+        } else if (currentrun == "Fastest") {
+            stopTimer = true;
+            customHandler.removeCallbacks(null);
+            timer.setText("Start");
+            currentrun = "Stop";
+            sendmsgMethod(this, "Fastest Path Stopped", isReceived);
+        }
+    }
+
+    private void setfastswitch(boolean isReceived) {
+        if (fastswitch.isChecked()) {
+            displayexplore.setBackgroundColor(getResources().getColor(R.color.red));
+            displayfastest.setBackgroundColor(getResources().getColor(R.color._light_green));
+            fastswitch.setText("Fastest Path");
+        } else {
+            displayexplore.setBackgroundColor(getResources().getColor(R.color._light_green));
+            displayfastest.setBackgroundColor(getResources().getColor(R.color.red));
+            fastswitch.setText("Exploration");
+            if (!updateString.equals("")) {
+                mapDecoder(updateString, false);
+            }
+        }
+    }
+
+    public void setObstacle(int boxid, String Location) {
+        Drawable upImage = this.getResources().getDrawable(R.drawable.upobstacle);
+        Drawable obbox = this.getResources().getDrawable(R.drawable.obstaclebox);
+        int i = boxid;
+        int x, y;
+        Log.d(TAG, String.valueOf(i));
+        TextView tq = (TextView) findViewById(i);
+//        x = i % 15;
+//        y = 19 - ((i - x) / 15);
+//        int nboxid=(y*15)+x;
+        if (!(i == topLeft || i == topLeft + 1 || i == topLeft + 2 || i == topLeft + 15 || i == topLeft + 16 || i == topLeft + 17
+                || i == topLeft + 30 || i == topLeft + 31 || i == topLeft + 32)) {
+            if (Location.equals("3")) {
+                tq.setBackground(obbox);
+                tq.setText("1");
+                tq.setTag("Obstacle");
+                tq.setTextColor(Color.parseColor("#ffffff"));
+                tq.setTypeface(null, Typeface.NORMAL);
+            } else {
+                String arrowObString = boxid + "," + Location;
+                tq.setBackground(upImage);
+                tq.setText(Location);
+                tq.setTag("Obstacle");
+                tq.setTextColor(Color.parseColor("#ffffff"));
+                tq.setTypeface(null, Typeface.NORMAL);
+                //obstaclelist.add(174);
+                if (obstaclelist.size() > 0) {
+                    for (int tempi = 0; tempi < arrowobstaclelist.size(); tempi++) {
+                        String[] arrobboxid = arrowobstaclelist.get(tempi).toString().split(",");
+                        if (Integer.valueOf(arrobboxid[0].toString()) == boxid) {
+                            Log.d(TAG, arrobboxid[0].toString() + " " + boxid);
+                            arrowobstaclelist.remove(tempi);
+                        }
+                    }
+                }
+                arrowobstaclelist.add(arrowObString);
+            }
+        }
+    }
+
+    public void resetMap(boolean isReceived) {
+        if (waypointloca >= 0) {
+            waypointloca = -1;
+        }
+        arrowobstaclelist.clear();
+        stopTimer = true;
+        customHandler.removeCallbacks(null);
+        timer.setText("Start");
+        currentrun = "Stop";
+        exploretime.setText("00:00:00");
+        fastesttime.setText("00:00:00");
+        fastswitch.setChecked(false);
+        xcoor.setText("");
+        ycoor.setText("");
+        msg_listadapter.clear();
+        editmsg.setText("");
+        topLeft = -17;
+        robotcenter = topLeft + 16;
+        GridLayout foreground = findViewById(R.id.gridLayOut);
+        Drawable box = this.getResources().getDrawable(R.drawable.box);
+        int y = foreground.getRowCount() * foreground.getColumnCount();
+        for (int i = 0; i < y; i++) {
+            TextView t = (TextView) findViewById(i);
+            if (i == 12 || i == 13 || i == 14 || i == 27 || i == 28 || i == 29 || i == 42 || i == 43 || i == 44) {
+                t.setBackground(goalBox);
+                t.setText("G");
+                t.setTag("GOAL");
+                t.setTextColor(Color.parseColor("#000000"));
+                t.setTypeface(null, Typeface.NORMAL);
+            } else {
+                t.setBackground(box);
+                t.setText("0");
+                t.setTextColor(Color.parseColor("#000000"));
+                t.setTag("Unknown");
+                t.setGravity(Gravity.CENTER);
+                t.setTypeface(null, Typeface.NORMAL);
+            }
+        }
+        up.setEnabled(false);
+        down.setEnabled(false);
+        left.setEnabled(false);
+        right.setEnabled(false);
+        startwaypointswitch.setChecked(false);
+        status.setText("Map Reset");
+        status.setBackgroundColor(getResources().getColor(R.color.red));
+    }
+
+    public void sendmsgMethod(Context context, String outgoingmsg, boolean isReceived) {
+        if (connectionstatus) {
+            Intent messaging_intent = new Intent("outMsg");
+            messaging_intent.putExtra("theOutMessage", outgoingmsg);
+            LocalBroadcastManager.getInstance(mContext).sendBroadcast(messaging_intent);
+        }
+        if (!isReceived) {
+            msg_chatlist.add(new MessageText(false, outgoingmsg, getResources()));
+            msg_listadapter.add("Sent: " + outgoingmsg);
+            msg_listview(context);
+        }
+    }
+
+    protected void msg_listview(Context context) {
+        if (msg_lv_preview != null) {
+            msg_lv_preview.setAdapter(msg_listadapter);
+        }
+
+        if (msg_lv_chat != null) {
+            msg_lv_chat.setAdapter(msg_listadapter);
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.main_menu, menu);
+        menu_item = menu;
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        super.onOptionsItemSelected(item);
+        switch (item.getItemId()) {
+            case R.id.bluetooth:
+                BluetoothOn();
+                Intent serverIntent = new Intent(this, DeviceListActivity.class);
+                startActivityForResult(serverIntent, REQUEST_CONNECT_DEVICE_SECURE);
+                break;
+            case R.id.discoverable:
+                BluetoothDiscoverable();
+                break;
+            case R.id.clearMap:
+                sendmsgMethod(getApplicationContext(), "reset", false);
+                resetMap(false);
+                break;
+            case R.id.bluetoothdisabled:
+                Intent messaging_intent = new Intent("disconnect");
+                LocalBroadcastManager.getInstance(mContext).sendBroadcast(messaging_intent);
+                Log.d(TAG, "Bluetooth device disconnected");
+                break;
+            case R.id.btnF1F2:
+                AlertDialog.Builder bt_dialog = pop_F1F2();
+                bt_dialog.show();
+                bt_dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+                    @Override
+                    public void onDismiss(DialogInterface dialog) {
+                    }
+                });
+                break;
+            case R.id.kill:
+                status.setText("Robot Stopped");
+                status.setBackgroundColor(getResources().getColor(R.color.red));
+                sendmsgMethod(this, "stop", false);
+                break;
+            case R.id.calib:
+                sendmsgMethod(this, "calib", false);
+                break;
+            case R.id.showMDF:
+                AlertDialog.Builder mdf_dialog = pop_MDF();
+                mdf_dialog.show();
+                mdf_dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+                    @Override
+                    public void onDismiss(DialogInterface dialog) {
+                    }
+                });
+                break;
+        }
+        return true;
+    }
+
+    protected AlertDialog.Builder pop_MDF() {
+        View v = inflater.inflate(R.layout.activity_mdf, null);
+        mdfstring1 = v.findViewById(R.id.tv_mdf1);
+        mdfstring1.setMovementMethod(new ScrollingMovementMethod());
+        mdfstring1.setTextIsSelectable(true);
+        mdfstring1.setText(MDFString1);
+        v.findViewById(R.id.btn_copy1).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("Copied MDF String 1", MDFString1);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(getApplicationContext(), "MDF String 1 Copied", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        mdfstring2 = v.findViewById(R.id.tv_mdf2);
+        mdfstring2.setMovementMethod(new ScrollingMovementMethod());
+        mdfstring2.setTextIsSelectable(true);
+        mdfstring2.setText(MDFString2);
+        v.findViewById(R.id.btn_copy2).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("Copied MDF String 2", MDFString2);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(getApplicationContext(), "MDF String 2 Copied", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+
+        obstring = v.findViewById(R.id.tv_ob);
+        obstring.setMovementMethod(new ScrollingMovementMethod());
+        obstring.setTextIsSelectable(true);
+        OBString = "";
+        if (arrowobstaclelist.size() > 0) {
+            for (int i = 0; i < arrowobstaclelist.size(); i++) {
+                String[] arrowstring = arrowobstaclelist.get(i).toString().split(",");
+                int x = Integer.valueOf(arrowstring[0].toString()) % 15;
+                int y = 19 - ((Integer.valueOf(arrowstring[0].toString()) - x) / 15);
+                OBString += "(" + x + ", " + y + ", " + arrowstring[1].toString() + ")\n";
+            }
+        }
+        obstring.setText(OBString);
+        v.findViewById(R.id.btn_copy3).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("Copied Obstacle String", OBString);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(getApplicationContext(), "Obstacle String Copied", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        return new AlertDialog.Builder(this).setView(v);
+    }
+
+    protected AlertDialog.Builder pop_F1F2() {
+        View v = inflater.inflate(R.layout.activity_function, null);
+        f1 = v.findViewById(R.id.et_f1);
+
+        String tempf1 = sharedPreferences.getString("F1", "NULL");
+
+        if (tempf1.equals("NULL")) {
+            Toast.makeText(getApplicationContext(), "F1 no data found", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(getApplicationContext(), "F1 data found", Toast.LENGTH_SHORT).show();
+            f1.setText(tempf1);
+            sendmsgMethod(getApplicationContext(), "F1: " + String.valueOf(tempf1), false);
+        }
+        v.findViewById(R.id.btnf1save).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                SharedPreferences.Editor editor = sharedPreferences.edit();
+                if (f1.length() > 0) {
+                    editor.putString("F1", String.valueOf(f1.getText()));
+                    editor.commit();
+                }
+                Toast.makeText(getApplicationContext(), "F1 Saved", Toast.LENGTH_SHORT).show();
+                sendmsgMethod(getApplicationContext(), "F1: " + String.valueOf(f1.getText()), false);
+            }
+        });
+
+        f2 = v.findViewById(R.id.et_f2);
+        String tempf2 = sharedPreferences.getString("F2", "NULL");
+
+        if (tempf2.equals("NULL")) {
+            Toast.makeText(getApplicationContext(), "F2 no data found", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(getApplicationContext(), "F2 data found", Toast.LENGTH_SHORT).show();
+            f2.setText(tempf2);
+            sendmsgMethod(getApplicationContext(), "F1: " + String.valueOf(tempf2), false);
+        }
+        v.findViewById(R.id.btnf2save).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                SharedPreferences.Editor editor = sharedPreferences.edit();
+                if (f2.length() > 0) {
+                    editor.putString("F2", String.valueOf(f2.getText()));
+                    editor.commit();
+                }
+                Toast.makeText(getApplicationContext(), "F2 Saved", Toast.LENGTH_SHORT).show();
+                sendmsgMethod(getApplicationContext(), "F2: " + String.valueOf(f2.getText()), false);
+            }
+        });
+        return new AlertDialog.Builder(this).setView(v);
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        BluetoothOn();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        unregisterReceiver(mBroadcastReceiver);
+    }
+
+    protected void BluetoothOn() {
+        if (myBluetoothAdapter == null) {
+            Toast.makeText(getApplicationContext(), "Bluetooth does not support on this device", Toast.LENGTH_LONG).show();
+        } else {
+            if (!myBluetoothAdapter.isEnabled()) {
+                Intent enableBluetoothIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                startActivity(enableBluetoothIntent);
+
+                IntentFilter intentFilter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+                registerReceiver(mBroadcastReceiver, intentFilter);
+            }
+        }
+    }
+
+    protected void BluetoothDiscoverable() {
+        if (!myBluetoothAdapter.isEnabled()) {
+            BluetoothOn();
+        }
+        Toast.makeText(getApplicationContext(), "Making device discoverable for 300 seconds.", Toast.LENGTH_LONG).show();
+        Intent discoverableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
+        discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300);
+        startActivity(discoverableIntent);
+
+        IntentFilter intentFilter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+        registerReceiver(mBroadcastReceiver, intentFilter);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+    }
+
+    public void robotMovement(boolean isReceived) {
+        Drawable box = this.getResources().getDrawable(R.drawable.box);
+        Drawable robot = this.getResources().getDrawable(R.drawable.robotbox);
+        Drawable exploredrobot = this.getResources().getDrawable(R.drawable.exploredbox);
+        boolean goal = false;
+        Drawable upImage = this.getResources().getDrawable(R.drawable.uparrow);
+        Drawable downImage = this.getResources().getDrawable(R.drawable.downarrow);
+        Drawable leftImage = this.getResources().getDrawable(R.drawable.leftarrow);
+        Drawable rightImage = this.getResources().getDrawable(R.drawable.rightarrow);
+        int x1 = topLeft % 15;
+        int y1 = (topLeft - x1) / 15;
+        int previoustopLeft = topLeft;
+        switch (currentDir) {
+            case w:
+                if (topLeft < 15) {
+                    break;
+
+                } else {
+                    topLeft -= 15;
+                    robotcenter -= 15;
+                }
+                break;
+            case s:
+                if (y1 < 17) {
+                    topLeft += 15;
+                    robotcenter += 15;
+                    break;
+                } else {
+                    break;
+                }
+            case d:
+                if (topLeft % 15 == 12) {
+                    break;
+                } else {
+                    topLeft += 1;
+                    robotcenter += 1;
+                    break;
+                }
+            case a:
+                if (topLeft % 15 == 0) {
+                    break;
+                } else {
+                    topLeft -= 1;
+                    robotcenter -= 1;
+                    break;
+                }
+        }
+        String string = "";
+        if (!manualon) {
+            for (int y = 0; y < 300; y++) {
+                TextView t = (TextView) findViewById(y);
+                if (topLeft == 12) {
+                    goal = true;
+                } else {
+                    goal = false;
+                }
+                if (y == topLeft || y == topLeft + 1 || y == topLeft + 2 || y == topLeft + 15 || y == topLeft + 16 || y == topLeft + 17
+                        || y == topLeft + 30 || y == topLeft + 31 || y == topLeft + 32) {
+                    if (y == topLeft + 16) {
+                        t.setText("");
+                        switch (currentDir) {
+                            case w:
+                                t.setBackground(upImage);
+                                break;
+                            case s:
+                                t.setBackground(downImage);
+                                break;
+                            case a:
+                                t.setBackground(leftImage);
+                                break;
+                            case d:
+                                t.setBackground(rightImage);
+                                break;
+                        }
+                    } else {
+                        t.setBackground(robot);
+                        t.setText("R");
+                        t.setTextColor(Color.parseColor("#FF0000"));
+                        t.setTag("Robot");
+                    }
+                } else if (t.getTag().equals("Explored") || t.getTag().equals("Robot") || t.getTag().equals("FastestExplored")) {
+                    if (y == 12 || y == 13 || y == 14 || y == 27 || y == 28 || y == 29 || y == 42 || y == 43 || y == 44) {
+                        t.setBackground(goalBox);
+                        t.setTag("GOAL");
+                        t.setText("1");
+                        t.setTextColor(Color.parseColor("#000000"));
+                    } else {
+                        if (fastswitch.isChecked()) {
+                            if (y == previoustopLeft || y == previoustopLeft + 1 || y == previoustopLeft + 2 || y == previoustopLeft + 15 || y == previoustopLeft + 16 || y == previoustopLeft + 17
+                                    || y == previoustopLeft + 30 || y == previoustopLeft + 31 || y == previoustopLeft + 32) {
+                                t.setBackground(mfastestbox);
+                                t.setText("1");
+                                t.setTextColor(Color.parseColor("#000000"));
+                                t.setTag("FastestExplored");
+                            }
+                        } else {
+                            t.setBackground(exploredrobot);
+                            t.setText("1");
+                            t.setTextColor(Color.parseColor("#000000"));
+                            t.setTag("Explored");
+                        }
+                    }
+                }
+                if ((t.getText().equals("P") && t.getTag().equals("Explored"))) {
+                    t.setText("1");
+                    t.setTextColor(Color.parseColor("#FF0000"));
+                    t.setBackground(mwaypointcleared);
+                    t.setTag("FastestExplored");
+                }
+
+            }
+            if (waypointloca >= 0) {
+                TextView ty = (TextView) findViewById(waypointloca);
+                if (ty.getTag().equals("Explored")) {
+                    ty.setBackground(mwaypointcleared);
+                    ty.setTextColor(Color.parseColor("#FF0000"));
+                    ty.setText("1");
+                    ty.setTag("Explored");
+                    Log.d(TAG, "Planted Waypoint at " + String.valueOf(waypointloca));
+                } else if (ty.getTag().equals("FastestExplored")) {
+                    ty.setBackground(mwaypointcleared);
+                    ty.setTextColor(Color.parseColor("#FF0000"));
+                    ty.setText("1");
+                    ty.setTag("FastestExplored");
+                }
+            }
+        } else {
+            topLeftList.add(topLeft);
+        }
+        if (goal) {
+            status.setText("You have reached the goal");
+            status.setBackgroundColor(getResources().getColor(R.color._light_green));
+            string = "You have reached the goal";
+        } else {
+            string = String.valueOf("Forward");
+            status.setText("Moving " + currentDir);
+            status.setBackgroundColor(getResources().getColor(R.color._light_green));
+        }
+        sendmsgMethod(this, string, isReceived);
+    }
+
+    public void rotateRobot(String direction, boolean isReceived) {
+        Drawable box = this.getResources().getDrawable(R.drawable.box);
+        Drawable robot = this.getResources().getDrawable(R.drawable.robotbox);
+        TextView t = (TextView) findViewById(robotcenter);
+        Drawable upImage = this.getResources().getDrawable(R.drawable.uparrow);
+        Drawable downImage = this.getResources().getDrawable(R.drawable.downarrow);
+        Drawable leftImage = this.getResources().getDrawable(R.drawable.leftarrow);
+        Drawable rightImage = this.getResources().getDrawable(R.drawable.rightarrow);
+        String string = "";
+        if (!manualon) {
+            switch (direction) {
+                case s:
+                    if (currentDir == d) {
+                        t.setBackground(leftImage);
+                        currentDir = a;
+                    } else if (currentDir == s) {
+                        t.setBackground(upImage);
+                        currentDir = w;
+                    } else if (currentDir == a) {
+                        t.setBackground(rightImage);
+                        currentDir = d;
+                    } else {
+                        t.setBackground(downImage);
+                        currentDir = s;
+                    }
+                    break;
+                case d:
+                    if (currentDir == w) {
+                        t.setBackground(rightImage);
+                        currentDir = d;
+                    } else if (currentDir == d) {
+                        t.setBackground(downImage);
+                        currentDir = s;
+                    } else if (currentDir == s) {
+                        t.setBackground(leftImage);
+                        currentDir = a;
+                    } else {
+                        t.setBackground(upImage);
+                        currentDir = w;
+                    }
+                    break;
+                case a:
+                    if (currentDir == w) {
+                        t.setBackground(leftImage);
+                        currentDir = a;
+                    } else if (currentDir == d) {
+                        t.setBackground(upImage);
+                        currentDir = w;
+                    } else if (currentDir == s) {
+                        t.setBackground(rightImage);
+                        currentDir = d;
+                    } else {
+                        t.setBackground(downImage);
+                        currentDir = s;
+                    }
+                    break;
+            }
+            string = "Rotate " + String.valueOf(direction);
+        } else {
+            switch (direction) {
+                case s:
+                    if (currentDir == d) {
+                        currentDir = a;
+                    } else if (currentDir == s) {
+                        currentDir = w;
+                    } else if (currentDir == a) {
+                        currentDir = d;
+                    } else {
+                        currentDir = s;
+                    }
+                    break;
+                case d:
+                    if (currentDir == w) {
+                        currentDir = d;
+                    } else if (currentDir == d) {
+                        currentDir = s;
+                    } else if (currentDir == s) {
+                        currentDir = a;
+                    } else {
+                        currentDir = w;
+                    }
+                    break;
+                case a:
+                    if (currentDir == w) {
+                        currentDir = a;
+                    } else if (currentDir == d) {
+                        currentDir = w;
+                    } else if (currentDir == s) {
+                        currentDir = d;
+                    } else {
+                        currentDir = s;
+                    }
+                    break;
+            }
+            string = "Facing " + currentDir;
+        }
+
+        sendmsgMethod(this, String.valueOf(direction), isReceived);
+        status.setText(string);
+        status.setBackgroundColor(getResources().getColor(R.color._light_green));
+    }
+
+    public void generateRobot() {
+        topLeft = currentstart;
+        Drawable robot = this.getResources().getDrawable(R.drawable.robotbox);
+        Drawable upImage = this.getResources().getDrawable(R.drawable.uparrow);
+        int x = topLeft % 15;
+        int y = (topLeft - x) / 15;
+        if ((x > 12) && (y > 17)) {
+            topLeft = (17 * 15) + 12;
+        } else if ((x > 12) && (y <= 18)) {
+            topLeft = (y * 15) + 12;
+        } else if ((x <= 12) && (y > 17)) {
+            topLeft = (17 * 15) + x;
+        } else {
+            topLeft = (y * 15) + x;
+        }
+        robotcenter = topLeft + 16;
+        for (int i = 0; i < 300; i++) {
+            TextView t = (TextView) findViewById(i);
+            if (i == topLeft || i == topLeft + 1 || i == topLeft + 2 || i == topLeft + 15 || i == topLeft + 16 || i == topLeft + 17
+                    || i == topLeft + 30 || i == topLeft + 31 || i == topLeft + 32) {
+                if (i == robotcenter) {
+                    t.setText("");
+                    t.setBackground(upImage);
+                    currentDir = "Up";
+                    t.setTag("Robot");
+                } else {
+                    t.setBackground(robot);
+                    t.setText("R");
+                    t.setTextColor(Color.parseColor("#FF0000"));
+                    t.setTag("Robot");
+                }
+            }
+        }
+        up.setEnabled(true);
+        down.setEnabled(true);
+        left.setEnabled(true);
+        right.setEnabled(true);
+        startwaypointswitch.setChecked(true);
+    }
+
+    public void setStart(boolean isReceieved) {
+        String outgoingmsg = "";
+        if (!startwaypointswitch.isChecked()) {
+            for (int i = 0; i < 300; i++) {
+                TextView t = (TextView) findViewById(i);
+                if (t.getTag().equals("Robot")) {
+                    t.setBackground(mexploredrobot);
+                    t.setText("1");
+                    t.setTextColor(Color.parseColor("#000000"));
+                    t.setTag("Explored");
+                }
+            }
+            for (int i = 0; i < 300; i++) {
+                TextView t = (TextView) findViewById(i);
+                if (t.getText().equals("O")) {
+                    int x = i % 15;
+                    int y = 19 - ((i - x) / 15);
+                    if (y < 2) {
+                        y = 2;
+                    }
+                    if (x > 12) {
+                        x = 12;
+                    }
+                    xcoor.setText("");
+                    ycoor.setText("");
+                    String x1 = String.format("%02d", x);
+                    String y1 = String.format("%02d", y);
+                    outgoingmsg = "sp(x:" + x1 + ",y:" + y1 + ")";
+                    if (!isReceieved) {
+                        sendmsgMethod(mContext, outgoingmsg, isReceieved);
+                    }
+                    status.setText("Start Point (X: " + String.valueOf(x) + ", Y: " + String.valueOf(y) + ")");
+                    status.setBackgroundColor(getResources().getColor(R.color._light_green));
+                    generateRobot();
+                }
+            }
+        } else {
+            int x = waypointloca % 15;
+            int y = 19 - ((waypointloca - x) / 15);
+            String x1 = String.format("%02d", x);
+            String y1 = String.format("%02d", y);
+            outgoingmsg = "wp(x:" + x1 + ",y:" + y1 + ")";
+            if (!isReceieved) {
+                sendmsgMethod(mContext, outgoingmsg, isReceieved);
+            }
+            status.setText("Waypoint (X: " + String.valueOf(x) + ", Y: " + String.valueOf(y) + ")");
+            status.setBackgroundColor(getResources().getColor(R.color._light_green));
+            Toast.makeText(MainActivity.this, "Waypoint is set", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    public void setStartWaypoint(boolean isReceived, int boxid) {
+        int i = boxid;
+        int x, y;
+        String outgoingmsg = "";
+        Log.d(TAG, String.valueOf(i));
+        TextView tq = (TextView) findViewById(i);
+        x = i % 15;
+        y = 19 - ((i - x) / 15);
+        if (!(i == topLeft || i == topLeft + 1 || i == topLeft + 2 || i == topLeft + 15 || i == topLeft + 16 || i == topLeft + 17
+                || i == topLeft + 30 || i == topLeft + 31 || i == topLeft + 32 || i == 12 || i == 13 || i == 14 || i == 27 || i == 28 || i == 29 || i == 42 || i == 43 || i == 44)) {
+            if (startwaypointswitch.isChecked()) {
+                if (tq.getText().equals("P")) {
+                    if (tq.getTag().equals("Unknown")) {
+                        tq.setText("0");
+                        tq.setBackground(mbox);
+                        tq.setTextColor(Color.parseColor("#000000"));
+                    } else {
+                        tq.setText("1");
+                        tq.setTextColor(Color.parseColor("#FF0000"));
+                        tq.setBackground(mwaypointcleared);
+                        tq.setTag("Explored");
+                    }
+                } else if (waypointloca >= 0) {
+                    if (tq.getTag().equals("Unknown")) {
+                        tq.setBackground(waypointBox);
+                        tq.setText("P");
+                        xcoor.setText(String.valueOf(x));
+                        ycoor.setText(String.valueOf(y));
+
+                        String x1 = String.format("%02d", x);
+                        String y1 = String.format("%02d", y);
+                        status.setText("Waypoint (X: " + String.valueOf(x) + ", Y: " + String.valueOf(y) + ")");
+                        status.setBackgroundColor(getResources().getColor(R.color._light_green));
+
+                        TextView ts = (TextView) findViewById(waypointloca);
+                        if ((ts.getTag().equals("Explored"))) {
+                            ts.setBackground(mexploredrobot);
+                            ts.setText("1");
+                            ts.setTextColor(Color.parseColor("#000000"));
+                            ts.setTag("Explored");
+                        } else if ((ts.getTag().equals("FastestExplored"))) {
+                            ts.setBackground(mfastestbox);
+                            ts.setText("1");
+                            ts.setTextColor(Color.parseColor("#000000"));
+                            ts.setTag("FastestExplored");
+                        } else {
+                            ts.setText("0");
+                            ts.setBackground(mbox);
+                            ts.setTag("Unknown");
+                            ts.setTextColor(Color.parseColor("#000000"));
+                        }
+                        //waypointloca = -1;
+                        waypointloca = i;
+                    } else {
+                        //if explored
+                        if (waypointloca >= 0) {
+                            tq.setText("1");
+                            tq.setTextColor(Color.parseColor("#FF0000"));
+                            tq.setBackground(mwaypointcleared);
+                            xcoor.setText(String.valueOf(x));
+                            ycoor.setText(String.valueOf(y));
+
+                            TextView ts = (TextView) findViewById(waypointloca);
+                            if ((ts.getTag().equals("Explored")) || (ts.getTag().equals("Robot"))) {
+                                ts.setBackground(mexploredrobot);
+                                ts.setText("1");
+                                ts.setTextColor(Color.parseColor("#000000"));
+                                ts.setTag("Explored");
+                            } else if (ts.getTag().equals("FastestExplored")) {
+                                ts.setBackground(mfastestbox);
+                                ts.setText("1");
+                                ts.setTextColor(Color.parseColor("#000000"));
+                                ts.setTag("FastestExplored");
+                            } else {
+                                ts.setText("0");
+                                ts.setBackground(mbox);
+                                ts.setTag("Unknown");
+                                ts.setTextColor(Color.parseColor("#000000"));
+                            }
+                            waypointloca = i;
+                            //waypointloca = -1;
+                        }
+                    }
+                } else {
+                    if (tq.getTag().equals("Explored") || tq.getTag().equals("FastestExplored")) {
+                        tq.setText("1");
+                        tq.setBackground(mwaypointcleared);
+                        tq.setTextColor(Color.parseColor("#FF0000"));
+                    } else {
+                        tq.setText("P");
+                        tq.setBackground(waypointBox);
+                        tq.setTextColor(Color.parseColor("#000000"));
+                    }
+                    xcoor.setText(String.valueOf(x));
+                    ycoor.setText(String.valueOf(y));
+                    waypointloca = i;
+                }
+
+            } else {
+                //set origin
+                if ((y) < 10) {
+                    if (currentstart != -1) {
+                        TextView ts = (TextView) findViewById(currentstart);
+                        if (ts.getTag().equals("Unknown")) {
+                            ts.setBackground(mbox);
+                            ts.setText("0");
+                            ts.setTextColor(Color.parseColor("#000000"));
+                        } else if (ts.getTag().equals("Explored")) {
+                            ts.setBackground(mexploredrobot);
+                            ts.setText("1");
+                            ts.setTextColor(Color.parseColor("#000000"));
+                            ts.setTag("Explored");
+                        } else if (ts.getTag().equals("FastestExplored")) {
+                            ts.setBackground(mfastestbox);
+                            ts.setText("1");
+                            ts.setTextColor(Color.parseColor("#000000"));
+                            ts.setTag("FastestExplored");
+                        }
+                    }
+                    tq.setText("O");
+                    tq.setBackground(startbox);
+                    currentstart = i;
+                    xcoor.setText(String.valueOf(x));
+                    ycoor.setText(String.valueOf(y));
+                }
+
+            }
+        }
+    }
+
+    public void generateMap() {
+        status = findViewById(R.id.viewStatus);
+        GridLayout foreground = findViewById(R.id.gridLayOut);
+        Drawable box = this.getResources().getDrawable(R.drawable.box);
+
+        int y = foreground.getRowCount() * foreground.getColumnCount();
+        for (int i = 0; i < y; i++) {
+            TextView t = new TextView(this);
+            t.setId(i);
+            if (i == 12 || i == 13 || i == 14 || i == 27 || i == 28 || i == 29 || i == 42 || i == 43 || i == 44) {
+                t.setBackground(goalBox);
+                t.setText("G");
+                t.setTag("GOAL");
+                t.setTextColor(Color.parseColor("#000000"));
+            } else {
+                t.setBackground(box);
+                t.setText("0");
+                t.setTag("Unknown");
+                t.setTextColor(Color.parseColor("#000000"));
+            }
+            foreground.addView(t);
+
+            t.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+
+                    //get the id of the selected box
+                    int i = view.getId();
+                    setStartWaypoint(false, i);
+                }
+
+            });
+            t.setGravity(Gravity.CENTER);
+        }
+    }
+
+    protected void sendGrid(boolean isReceived) {
+        GridLayout foreground = findViewById(R.id.gridLayOut);
+        String mapDetails = "\n";
+        int y = foreground.getRowCount() * foreground.getColumnCount();
+        for (int i = 0; i < y; i++) {
+            TextView t = findViewById(i);
+            if (i == 0) {
+                if (t.getTag().equals("Robot")) {
+                    mapDetails = mapDetails + "1" + "";
+                } else {
+                    mapDetails = mapDetails + t.getText().toString() + "";
+                }
+            } else if (i > 0 && i % 15 == 0) {
+                if (t.getTag().equals("Robot")) {
+                    mapDetails = mapDetails + " \n" + "1";
+                } else {
+                    mapDetails = mapDetails + " \n" + t.getText().toString();
+                }
+            } else {
+                if (t.getTag().equals("Robot")) {
+                    mapDetails = mapDetails + " " + "1";
+                } else {
+                    mapDetails = mapDetails + " " + t.getText().toString();
+                }
+            }
+        }
+        sendmsgMethod(mContext, mapDetails, false);
+    }
+
+    protected void mapDecoder(String msg, boolean isUpdate) {
+        //if(isUpdate) {
+        obstaclelist.clear();
+        exploredmap.clear();
+        obstaclemap.clear();
+        tarrowobstaclelist.clear();
+        String tempMsg = msg;
+        String[] mdfstr1 = tempMsg.split(":");
+        MDFString1 = mdfstr1[1].toString();
+        MDFString2 = mdfstr1[3].substring(1, mdfstr1[3].length()
+
+        ).toString();
+        String bin = new BigInteger(mdfstr1[1].toString(), 16).toString(2);
+        String robot = mdfstr1[2].toString();
+        Drawable upImage = this.getResources().getDrawable(R.drawable.upobstacle);
+        for (int temp = 2; temp < bin.length() - 2; temp++) {
+            exploredmap.add(Integer.parseInt(bin.substring(temp, temp + 1)));
+        }
+        String string = "";
+        for (int temp = 0; temp < exploredmap.size(); temp++) {
+            string += exploredmap.get(temp).toString();
+        }
+        //editmsg.setText(string);
+        int counter = 0;
+        for (int y = 19; y >= 0; y--) {
+            for (int x = 0; x < 15; x++) {
+                int boxid = (y * 15) + x;
+                TextView t2 = findViewById(boxid);
+                if (exploredmap.get(counter).toString().equals("0")) {
+                    t2.setText(exploredmap.get(counter).toString());
+                    t2.setBackground(mbox);
+                    t2.setTextColor(Color.parseColor("#000000"));
+                    t2.setTag("Unknown");
+                    t2.setTypeface(null, Typeface.NORMAL);
+                } else {
+                    if (boxid == 12 || boxid == 13 || boxid == 14 || boxid == 27 || boxid == 28 || boxid == 29 || boxid == 42 || boxid == 43 || boxid == 44) {
+                        t2.setBackground(goalBox);
+                        t2.setTag("GOAL");
+                        t2.setText("1");
+                        t2.setTextColor(Color.parseColor("#000000"));
+                        t2.setTypeface(null, Typeface.NORMAL);
+                    } else {
+                        t2.setBackground(mexploredrobot);
+                        t2.setText(exploredmap.get(counter).toString());
+                        t2.setTextColor(Color.parseColor("#000000"));
+                        t2.setTag("Explored");
+                        t2.setTypeface(null, Typeface.NORMAL);
+                    }
+                }
+                counter++;
+            }
+
+        }
+        if (mdfstr1[2].toString().matches("[(]{1}[0-9]{2}[,][0-9]{2}[,]{1}[NSEWnsew]{1}[)]{1}")) {
+            //ob(xx,yy,N/S/E/W,u)
+            try {
+                int x1 = Integer.valueOf(mdfstr1[2].toString().substring(1, 3));
+                int y1 = Integer.valueOf(mdfstr1[2].toString().substring(4, 6));
+                String loc = mdfstr1[2].toString().substring(7, 8).toUpperCase();
+                int boxid;
+                //String arrow = tempMsg.substring(11, 12).toUpperCase();
+                if ((x1 > 12) && (y1 < 2)) {
+                    boxid = ((19 - 2) * 15) + 12;
+                } else if ((x1 > 12) && (y1 >= 2)) {
+                    boxid = ((19 - y1) * 15) + 12;
+                } else if ((x1 <= 12) && (y1 < 2)) {
+                    boxid = ((19 - 2) * 15) + x1;
+                } else {
+                    boxid = ((19 - y1) * 15) + x1;
+                }
+                setRobot(boxid, loc);
+            } catch (NumberFormatException e) {
+                e.printStackTrace();
+            }
+        }
+        if (waypointloca >= 0) {
+            TextView ty = (TextView) findViewById(waypointloca);
+            if (ty.getTag().equals("Explored")) {
+                ty.setBackground(mwaypointcleared);
+                ty.setTextColor(Color.parseColor("#FF0000"));
+                ty.setText("1");
+                ty.setTag("Explored");
+            } else {
+                ty.setBackground(waypointBox);
+                ty.setTextColor(Color.parseColor("#000000"));
+                ty.setText("P");
+            }
+        }
+
+        String bin1 = new BigInteger(mdfstr1[3].toString(), 16).toString(2);
+        Log.d(TAG, bin1);
+
+        for (int temp = 1; temp < bin1.length(); temp++) {
+            obstaclemap.add(Integer.parseInt(bin1.substring(temp, temp + 1)));
+        }
+        String string1 = "";
+        for (int temp = 0; temp < obstaclemap.size(); temp++) {
+            string1 += obstaclemap.get(temp).toString();
+        }
+        Log.d(TAG, String.valueOf(string1));
+        int tempint = 0;
+        try {
+            for (int i = 0; i < exploredmap.size(); i++) {
+                if (exploredmap.get(i).toString().equals("1") && exploredmap.get(i).toString().equals(obstaclemap.get(tempint).toString())) {
+                    int tempx = i % 15;
+                    int tempy = 19 - ((i - tempx) / 15);
+                    int tempyboxid = (tempy * 15) + tempx;
+                    obstaclelist.add(tempyboxid);
+                    if (tempint < obstaclemap.size()) {
+                        tempint++;
+                    }
+                } else if ((exploredmap.get(i).toString().equals("1") && obstaclemap.get(tempint).toString().equals("0"))) {
+                    if (tempint < obstaclemap.size()) {
+                        tempint++;
+                    }
+                }
+            }
+        } catch (ArrayIndexOutOfBoundsException e) {
+            e.printStackTrace();
+        }
+
+        if (arrowobstaclelist.size() > 0) {
+            for (int i = 0; i < arrowobstaclelist.size(); i++) {
+                String[] arrowobstacle = arrowobstaclelist.get(i).toString().split(",");
+                tarrowobstaclelist.add(Integer.valueOf(arrowobstacle[0].toString()));
+            }
+        }
+        for (int i = 0; i < 300; i++) {
+            TextView t3 = (TextView) findViewById(i);
+            for (int j = 0; j < obstaclelist.size(); j++) {
+                if (i == obstaclelist.get(j)) {
+                    if (tarrowobstaclelist.size() > 0) {
+                        if (tarrowobstaclelist.contains(obstaclelist.get(j))) {
+                            for (int tempi = 0; tempi < arrowobstaclelist.size(); tempi++) {
+
+                                String[] arrowobstacle = arrowobstaclelist.get(tempi).toString().split(",");
+                                int temp2 = Integer.valueOf(arrowobstacle[0].toString());
+                                int tempx = temp2 % 15;
+                                int tempy = (temp2 - tempx) / 15;
+                                int tempyboxid = (tempy * 15) + tempx;
+                                if (tempyboxid == i) {
+
+                                    t3.setBackground(upImage);
+                                    t3.setText(arrowobstacle[1].toString().toUpperCase());
+                                    t3.setTag("Obstacle");
+                                    t3.setTextColor(Color.parseColor("#ffffff"));
+                                    t3.setTypeface(null, Typeface.NORMAL);
+                                }
+
+                            }
+                        } else {
+                            t3.setBackground(mobstaclebox);
+                            t3.setText("1");
+                            t3.setTag("Obstacle");
+                            t3.setTextColor(Color.parseColor("#ffffff"));
+                            t3.setTypeface(null, Typeface.NORMAL);
+                        }
+                    } else {
+                        t3.setBackground(mobstaclebox);
+                        t3.setText("1");
+                        t3.setTag("Obstacle");
+                        t3.setTextColor(Color.parseColor("#ffffff"));
+                        t3.setTypeface(null, Typeface.NORMAL);
+                    }
+                }
+            }
+        }
+        updateString = msg;
+    }
+
+    protected void setRobot(int boxid, String direction) {
+        Drawable robot = this.getResources().getDrawable(R.drawable.robotbox);
+        Drawable upImage = this.getResources().getDrawable(R.drawable.uparrow);
+        Drawable downImage = this.getResources().getDrawable(R.drawable.downarrow);
+        Drawable leftImage = this.getResources().getDrawable(R.drawable.leftarrow);
+        Drawable rightImage = this.getResources().getDrawable(R.drawable.rightarrow);
+        topLeft = currentstart;
+        topLeft = boxid;
+        robotcenter = topLeft + 16;
+        for (int i = 0; i < 300; i++) {
+            TextView t = (TextView) findViewById(i);
+            if (i == topLeft || i == topLeft + 1 || i == topLeft + 2 || i == topLeft + 15 || i == topLeft + 16 || i == topLeft + 17
+                    || i == topLeft + 30 || i == topLeft + 31 || i == topLeft + 32) {
+                if (i == robotcenter) {
+                    t.setText("");
+                    switch (direction) {
+                        case "N":
+                            t.setBackground(upImage);
+                            currentDir = w;
+                            break;
+                        case "S":
+                            t.setBackground(downImage);
+                            currentDir = s;
+                            break;
+                        case "W":
+                            t.setBackground(leftImage);
+                            currentDir = a;
+                            break;
+                        case "E":
+                            t.setBackground(rightImage);
+                            currentDir = d;
+                            break;
+                    }
+                } else {
+                    t.setBackground(robot);
+                    t.setText("R");
+                    t.setTextColor(Color.parseColor("#FF0000"));
+                    t.setTag("Robot");
+                }
+            }
+        }
+        up.setEnabled(true);
+        down.setEnabled(true);
+        left.setEnabled(true);
+        right.setEnabled(true);
+        startwaypointswitch.setChecked(true);
+    }
+
+    protected void checkArrow(String msg, boolean isUpdate) {
+        //if(isUpdate) {
+        obstaclelist.clear();
+        exploredmap.clear();
+        obstaclemap.clear();
+        tarrowobstaclelist.clear();
+        ctarrowobstaclelist.clear();
+        String tempMsg = msg;
+        String[] mdfstr1 = tempMsg.split(":");
+        String p1 = mdfstr1[1].toString();
+        String p2 = "1" + mdfstr1[2].toString();
+        String bin = new BigInteger(p1, 16).toString(2);
+        Drawable upImage = this.getResources().getDrawable(R.drawable.upobstacle);
+        for (int temp = 2; temp < bin.length() - 2; temp++) {
+            exploredmap.add(Integer.parseInt(bin.substring(temp, temp + 1)));
+        }
+        String string = "";
+        int count = 0;
+        for (int temp = 0; temp < exploredmap.size(); temp++) {
+            string += exploredmap.get(temp).toString();
+            count++;
+        }
+        int c1 = count;
+        String bin1 = new BigInteger(p2, 16).toString(2);
+        Log.d(TAG, bin1);
+
+        for (int temp = 1; temp < bin1.length(); temp++) {
+            obstaclemap.add(Integer.parseInt(bin1.substring(temp, temp + 1)));
+        }
+        String string1 = "";
+        for (int temp = 0; temp < obstaclemap.size(); temp++) {
+            string1 += obstaclemap.get(temp).toString();
+        }
+        Log.d(TAG, String.valueOf(string1));
+        int tempint = 0;
+        try {
+            for (int i = 0; i < exploredmap.size(); i++) {
+                if (exploredmap.get(i).toString().equals("1") && exploredmap.get(i).toString().equals(obstaclemap.get(tempint).toString())) {
+                    int tempx = i % 15;
+                    int tempy = 19 - ((i - tempx) / 15);
+                    int tempyboxid = (tempy * 15) + tempx;
+                    obstaclelist.add(tempyboxid);
+                    if (tempint < obstaclemap.size()) {
+                        tempint++;
+                    }
+                } else if ((exploredmap.get(i).toString().equals("1") && obstaclemap.get(tempint).toString().equals("0"))) {
+                    if (tempint < obstaclemap.size()) {
+                        tempint++;
+                    }
+                }
+            }
+        } catch (ArrayIndexOutOfBoundsException e) {
+            e.printStackTrace();
+        }
+
+        if (arrowobstaclelist.size() > 0) {
+            for (int i = 0; i < arrowobstaclelist.size(); i++) {
+                String[] arrowobstacle = arrowobstaclelist.get(i).toString().split(",");
+                tarrowobstaclelist.add(Integer.valueOf(arrowobstacle[0].toString()));
+            }
+        }
+        int counter = 0;
+        for (int k = 0; k < obstaclelist.size(); k++) {
+            int t2 = obstaclelist.get(k);
+            if (tarrowobstaclelist.contains(obstaclelist.get(k))) {
+                ctarrowobstaclelist.add(obstaclelist.get(k));
+            }
+        }
+        for (int i = 0; i < tarrowobstaclelist.size(); i++) {
+            boolean found = false;
+            if (ctarrowobstaclelist.contains(Integer.valueOf(tarrowobstaclelist.get(i).toString()))) {
+                found = true;
+            }
+            if (!found) {
+                for (int j = 0; j < arrowobstaclelist.size(); j++) {
+                    String[] arrowobstacle = arrowobstaclelist.get(j).toString().split(",");
+                    if (arrowobstacle[0].toString().equals(tarrowobstaclelist.get(i).toString())) {
+                        arrowobstaclelist.remove(j);
+                    }
+                }
+            }
+        }
+        tempMsg="tm:"+p1+":(00,02,N):"+p2;
+        mapDecoder(tempMsg, isUpdate);
+    }
+}

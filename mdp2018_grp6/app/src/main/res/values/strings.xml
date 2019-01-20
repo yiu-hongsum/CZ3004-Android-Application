@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">MDP Group 6</string>
+
+    <!--  BluetoothChat -->
+    <string name="send">Send</string>
+    <string name="not_connected">Please connect to Roboto first!</string>
+    <string name="bt_not_enabled_leaving">Bluetooth was not enabled. Leaving Roboto App.</string>
+    <string name="title_connecting">connecting...</string>
+    <string name="title_connected_to">You are now connected to Roboto</string>
+    <string name="title_not_connected">not connected</string>
+
+    <!--  DeviceListActivity -->
+    <string name="scanning">Scanning for devices...</string>
+    <string name="select_device">Select a device to connect</string>
+    <string name="none_paired">No devices have been paired</string>
+    <string name="none_found">No devices found</string>
+    <string name="title_paired_devices">Paired Devices</string>
+    <string name="title_other_devices">Other Available Devices</string>
+    <string name="button_scan">Scan for devices</string>
+
+    <!-- Options Menu -->
+    <string name="secure_connect">Connect a device - Secure</string>
+    <string name="insecure_connect">Connect a device - Insecure</string>
+    <string name="discoverable">Make discoverable</string>
+    <string name="title_activity_mdf">MDFActivity</string>
+
+    <!-- Bluetoot Chat -->
+    <string name="msg_header">Message</string>
+    <string name="msg_send">Send</string>
+    <string name="msg_clear">Clear</string>
+
+
+</resources>

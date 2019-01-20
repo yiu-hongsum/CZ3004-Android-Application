@@ -1,0 +1,22 @@
+package com.example.user.mdp_android;
+
+import android.content.res.Resources;
+
+public class MessageText {
+
+    private int color;
+    private String details;
+
+    MessageText(boolean isRead, String d, Resources r) {
+        color = isRead ? r.getColor(R.color.light_sky_blue) : r.getColor(R.color.yellow);
+        details = d;
+    }
+
+    public int getColor() {
+        return color;
+    }
+
+    public String getDetails() {
+        return details;
+    }
+}

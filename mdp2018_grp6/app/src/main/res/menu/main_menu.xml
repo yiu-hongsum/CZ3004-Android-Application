@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/bluetooth"
+        android:icon="@drawable/ic_bluetooth"
+        android:title="Scan for new Devices"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/bluetoothdisabled"
+        android:icon="@drawable/ic_bluetooth_disable"
+        android:title="Disconnect Bluetooth"
+        app:showAsAction="ifRoom"
+        android:visible="false"/>
+
+
+    <item
+        android:id="@+id/discoverable"
+        android:title="Make Discoverable"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/calib"
+        android:title="Calib"
+        app:showAsAction="ifRoom"
+        />
+
+    <item
+        android:id="@+id/kill"
+        android:title="KILL"
+        app:showAsAction="ifRoom"
+        />
+
+
+    <item
+        android:id="@+id/btnF1F2"
+        android:title="Function String"
+        app:showAsAction="ifRoom"
+        />
+
+    <item
+        android:id="@+id/showMDF"
+        android:title="Show MDF and Obstacle"
+        app:showAsAction="ifRoom"
+        />
+
+
+    <item
+        android:id="@+id/clearMap"
+        android:title="Clear Map"
+        app:showAsAction="ifRoom"
+        />
+</menu>
